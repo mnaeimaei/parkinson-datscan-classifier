@@ -1,0 +1,78 @@
+# DaT-SPECT normal vs pathologic — the eight 3D experiments (E1-E3, E5, E6, E8-E10) x S1-S6.
+#
+# Inputs are the frozen outputs of the research pipeline (steps 1-11 in research/):
+#   step-10 manifest: uid, is_pathologic, whole_path (192x192x160), roi_path (44x44x36)
+#   step-11 folds:    uid, fold (frozen stratified 5-fold split)
+# Preprocessing (RAS, 2.46 mm resampling, registration-assisted occipital normalisation,
+# striatal crop) is already applied, so no CaliVox preprocessing steps are needed here.
+#
+#   calivox benchmark configs/datscan_3d.yaml --models E6 --scenarios S5
+name: datscan-3d
+description: 1,362 DaT-SPECT subjects (615 normal, 747 pathologic), frozen 5-fold CV.
+
+task: {type: binary, positive: 1, threshold: 0.5}
+
+data:
+  manifest: ../research/data/preprocessing_supervised_data/step10_supervised_dataset_manifest_data/supervised_dataset/supervised_dataset_manifest.csv
+  root: ../research                 # manifest paths are relative to the research pipeline root
+  id: uid
+  label: is_pathologic
+  inputs: {whole: whole_path, roi: roi_path}
+  depth_axis: z                     # NIfTI z -> model depth, as in the original [B,1,D,H,W]
+
+scenarios:
+  S1: {inputs: [whole]}
+  S2: {inputs: [roi]}
+  S3: {inputs: [whole, roi]}
+  S4: {inputs: [whole], augment: true}
+  S5: {inputs: [roi], augment: true}
+  S6: {inputs: [whole, roi], augment: true}
+
+# batch sizes: the original per-model, per-input suggestions (training_config.py)
+models:
+  E1:  {name: simple3d, params: {dropout: 0.3}, batch_size: {whole: 2, roi: 8, whole+roi: 1}}
+  E2:  {name: resnet3d, params: {depth: 18, shortcut_type: A}, batch_size: {whole: 1, roi: 4, whole+roi: 1}}
+  E3:  {name: resnet3d, params: {depth: 18, shortcut_type: A}, pretrained: ../weights/resnet_18_23dataset.pth,
+        batch_size: {whole: 1, roi: 4, whole+roi: 1}}
+  E5:  {name: r3d18, batch_size: {whole: 1, roi: 2, whole+roi: 1}}
+  E6:  {name: r3d18, pretrained: kinetics400, batch_size: {whole: 1, roi: 2, whole+roi: 1}}
+  E8:  {name: densenet3d, batch_size: {whole: 1, roi: 2, whole+roi: 1}}
+  E9:  {name: swin3d_t, batch_size: 1}
+  E10: {name: swin3d_t, pretrained: kinetics400, batch_size: 1}
+
+augment:                            # training batches only (src/augmentation/augmentations.py)
+  spatial_probability: 0.80
+  rotation_degrees: 5.0
+  translation_fraction: 0.03
+  scale_fraction: 0.05
+  intensity_probability: 0.50
+  intensity_scale_fraction: 0.05
+  noise_probability: 0.30
+  noise_std_fraction: 0.01
+
+cv:
+  folds: 5
+  folds_file: ../research/data/preprocessing_supervised_data/step11_create_freeze_cv_splits_data/fold_assignments.csv
+  validation: heldout               # original protocol: checkpoint chosen on the held-out fold
+                                    # (use `inner` for a strictly unbiased OOF estimate)
+
+training:                           # src/configs/training_config.py
+  epochs: 100
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+  plateau_factor: 0.5
+  plateau_patience: 5
+  min_learning_rate: 1.0e-7
+  early_stopping_patience: 15
+  warmup_epochs: 5
+  grad_clip: 1.0
+  amp: true
+  seed: 2026
+  device: auto
+  num_workers: 4
+
+calibration: {methods: [none, temperature, platt, isotonic], folds: 5, seed: 2026}
+ensemble: {max_members: 5, candidates: 12, final_temperature: true}
+
+output_dir: ../runs
+cache_dir: ../cache

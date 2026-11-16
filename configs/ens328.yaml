@@ -1,0 +1,9 @@
+# ENS328 — the final selected ensemble of the study, as a fixed CaliVox member list.
+#   calivox ensemble runs --members configs/ens328.yaml --out runs/ENS328.json
+#   calivox freeze runs/ENS328.json --out bundles/ENS328
+members:
+  - {run: E6__S5, calibration: none}          # P1  R3D-18 Kinetics-400, ROI + aug.
+  - {run: E7__S4, calibration: temperature}   # P2  2.5D ResNet-18 + attention (scratch), whole + aug.
+  - {run: E6__S2, calibration: temperature}   # P3  R3D-18 Kinetics-400, ROI
+  - {run: E4__S2, calibration: temperature}   # P7  2.5D ResNet-18 + attention (ImageNet), ROI
+  - {run: E2__S2, calibration: temperature}   # P8  3D ResNet-18 (scratch), ROI
